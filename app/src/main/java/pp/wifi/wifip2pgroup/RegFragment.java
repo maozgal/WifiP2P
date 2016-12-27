@@ -30,6 +30,7 @@ public class RegFragment extends Fragment  {
     public static final String TAG = "RegFragment";
     TextView tvLog;
     Button btScan;
+    Button btText;
 
 
     WifiP2pManager.Channel mChannel;
@@ -49,11 +50,20 @@ public class RegFragment extends Fragment  {
     private void setViews(View view) {
         tvLog = (TextView) view.findViewById(R.id.reg_log_tv);
         btScan = (Button) view.findViewById(R.id.scan_bt);
+        btText = (Button) view.findViewById(R.id.text_bt);
+
+        btText.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                RxNetworkSession.getInstance().pingTheServer();
+                log("ping");
+            }
+        });
 
         btScan.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
-                EventBus.getDefault().post(new EventToMainActivity(EventToMainActivity.OPEN_CLIENT));
+                EventBus.getDefault().post(new EventToMainActivity(EventToMainActivity.PING));
                 return true;
             }
         });
