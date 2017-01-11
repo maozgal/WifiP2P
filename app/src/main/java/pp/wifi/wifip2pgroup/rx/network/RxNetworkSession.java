@@ -3,10 +3,13 @@ package pp.wifi.wifip2pgroup.rx.network;
 import org.greenrobot.eventbus.EventBus;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -25,13 +28,17 @@ import rx.schedulers.Schedulers;
 
 public class RxNetworkSession {
     private static RxNetworkSession instance;
-    private Socket client;
+    private Socket clientSocket;
+    private boolean amIOwner = false;
 
     public static RxNetworkSession getInstance() {
         if(instance != null) {
             return instance;
         }
-        else return new RxNetworkSession();
+        else{
+            instance = new RxNetworkSession();
+            return instance;
+        }
     }
 
     public static boolean isOn(){
@@ -39,54 +46,90 @@ public class RxNetworkSession {
     }
 
     public void openServer(){
-        Subscription socketServerObservable = Observable.create(new Observable.OnSubscribe<String>() {
+        Subscription socketServerObservable = Observable.create(new Observable.OnSubscribe<Socket>() {
             @Override
-            public void call(Subscriber<? super String> subscriber) {
+            public void call(Subscriber<? super Socket> subscriber) {
                 try {
                     ServerSocket serverSocket = new ServerSocket(8888);
                     Socket client = serverSocket.accept();
-                    EventBus.getDefault().post(new MessageToFragmentEvent("***** CLIENT IN SERVER *****", RegFragment.TAG));
+                    EventBus.getDefault().post(new MessageToFragmentEvent("***** Observable Is On *****", RegFragment.TAG));
                     InputStream inputStream = client.getInputStream();
                     BufferedReader r = new BufferedReader(new InputStreamReader(inputStream));
                     StringBuilder total = new StringBuilder();
                     String line;
                     while ((line = r.readLine()) != null) {
-                        total.append(line).append('\n');
+                        if (line.equals(Statics.MESSAGE_END)) {
+                            EventBus.getDefault().post(new MessageToFragmentEvent(total.toString(), RegFragment.TAG));
+                        } else {
+                            total.append(line).append('\n');
+                            EventBus.getDefault().post(new MessageToFragmentEvent("***** Line Added *****", RegFragment.TAG));
+                        }
                     }
-                    EventBus.getDefault().post(new MessageToFragmentEvent("***** "+total.toString()+" *****", RegFragment.TAG));
-                    subscriber.onNext(total.toString());
+                    EventBus.getDefault().post(new MessageToFragmentEvent("***** " + total.toString() + " *****", RegFragment.TAG));
+                    //subscriber.onNext(client);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
         }).subscribeOn(Schedulers.newThread())
                 .observeOn(Schedulers.newThread())
-                .subscribe(new Action1<String>() {
+                .subscribe(new Action1<Socket>() {
                     @Override
-                    public void call(String total) {
-                        if(total.toString().startsWith(Statics.MESSAGE_BEGIN)){
-                            String msg = getMsg(total);
-                            String msgArray[] = msg.split(Statics.COLON);
-                            if(msgArray[0]!= null && msgArray[0].equals(Statics.CLIENT_HANDSHAKE)){
-                                EventBus.getDefault().post(new MessageToFragmentEvent("***** HAND SHAKE SERVER SIDE *****", RegFragment.TAG));
-                                openClient(msgArray[1].replace("/",""));
-                            }
+                    public void call(Socket client) {
+                        boolean sessionIsOn = true;
+
+                        try {
+                        while (sessionIsOn) {
+                            InputStream inputStream = client.getInputStream();
+                            BufferedReader r = new BufferedReader(new InputStreamReader(inputStream));
+
+                                StringBuilder total = new StringBuilder();
+                                String line;
+                            EventBus.getDefault().post(new MessageToFragmentEvent("***** " + "Wait For Line" + " *****", RegFragment.TAG));
+                                while ((line = r.readLine()) != null) {
+                                    total.append(line).append('\n');
+                                }
+                               // if(total.length() > 0)
+                                 EventBus.getDefault().post(new MessageToFragmentEvent("***** " + total.toString() + " *****", RegFragment.TAG));
+
+
+//                                if (total.toString().startsWith(Statics.MESSAGE_BEGIN)) {
+//                                    String msg = getMsg(total.toString());
+//                                    String msgArray[] = msg.split(Statics.COLON);
+//                                    if (msgArray[0] != null && msgArray[0].equals(Statics.CLIENT_HANDSHAKE)) {
+//                                        EventBus.getDefault().post(new MessageToFragmentEvent("***** HAND SHAKE SERVER SIDE *****", RegFragment.TAG));
+//                                        openClient(msgArray[1].replace("/", ""));
+//                                    }
+//                                }
+//
+//                                if (total.toString().startsWith(Statics.END_OF_SESSION)) {
+//                                    sessionIsOn = false;
+//                                }
+
+                        }
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
                     }
                 });
     }
 
+    /**
+     * returns a connected client Socket. You should run this methid on a background thread.
+     * @param host
+     * @return
+     */
     public Socket openClient(String host) {
-
         Socket socket = null;
         try {
             socket = new Socket();
             socket.bind(null);
             socket.connect((new InetSocketAddress(host, 8888)), 500);
+            PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+            out.println("gal");
+            out.flush();
 
-            OutputStream outputStream = socket.getOutputStream();
-            outputStream.write("gal".getBytes());
-            EventBus.getDefault().post(new MessageToFragmentEvent("***** CLENT SET MSG *****", RegFragment.TAG));
+            EventBus.getDefault().post(new MessageToFragmentEvent("***** CLENT SENT MSG *****", RegFragment.TAG));
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -98,19 +141,59 @@ public class RxNetworkSession {
         return msg;
     }
 
-    public void openNotOwnerClient(String host) {
-        try {
-            String str = Statics.SERVER_HANDSHAKE;
-            client = openClient(host.replace("/",""));
-            OutputStream outputStream = client.getOutputStream();
-            outputStream.write(str.getBytes());
-            outputStream.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    public void openNotOwnerClient(final String host) {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String str = Statics.SERVER_HANDSHAKE;
+                    clientSocket = openClient(host.replace("/",""));
+                    EventBus.getDefault().post(new MessageToFragmentEvent("clientSocket : " +clientSocket, RegFragment.TAG));
+//                    OutputStream outputStream = clientSocket.getOutputStream();
+//                    outputStream.write(str.getBytes());
+//                    outputStream.write("\n".getBytes());
+//                    outputStream.();
+                    PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream())), true);
+                    out.println(str);
+                    out.println();
+                    out.flush();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        t.start();
+
     }
 
-    public Socket getClient() {
-        return client;
+    public Socket getClientSocket() {
+        return clientSocket;
+    }
+
+    public void pingTheServer() {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    EventBus.getDefault().post(new MessageToFragmentEvent("clientSocket : " +clientSocket, RegFragment.TAG));
+//                    OutputStream outputStream = clientSocket.getOutputStream();
+//                    outputStream.write("gal".getBytes());
+//                    outputStream.write("maoz".getBytes());
+//                    outputStream.close();
+                    PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream())), true);
+                    out.println("gal");
+                    out.flush();
+                    out.println(Statics.MESSAGE_END);
+                    out.flush();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        t.start();
+    }
+
+    public void setAmIOwner(boolean amIOwner) {
+        this.amIOwner = amIOwner;
     }
 }

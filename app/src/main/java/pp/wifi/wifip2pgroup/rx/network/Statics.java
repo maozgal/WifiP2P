@@ -10,4 +10,5 @@ public class Statics {
     public static final String DELIMITER = "@@$@@";
     public static final String COLON = "@@%@@";
     public static final String SERVER_HANDSHAKE = "SERVER_HANDSHAKE";
+    public static final String END_OF_SESSION = "END_OF_SESSION";
 }

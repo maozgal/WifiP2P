@@ -66,24 +66,31 @@ public class MainActivity extends AppCompatActivity {
                         EventBus.getDefault().post(new MessageToFragmentEvent("***** Server Opened *****",RegFragment.TAG));
                         String ip = getDottedDecimalIP(getLocalIPAddress());
                         String myIp = ip.replace("/","");
-                        EventBus.getDefault().post(new MessageToFragmentEvent("***** my IP : "+ip+" \nowner : "+wifiP2pInfo.groupOwnerAddress.toString()+" *****",RegFragment.TAG));
-                        if(!myIp.equals(wifiP2pInfo.groupOwnerAddress.toString().replace("/",""))) {
-                            Thread t = new Thread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    try {
-                                        Thread.sleep(500);
-                                    } catch (InterruptedException e) {
-                                        e.printStackTrace();
-                                    }
-                                    rxNetworkSession.openNotOwnerClient(wifiP2pInfo.groupOwnerAddress.toString().replace("/",""));
-                                    EventBus.getDefault().post(new MessageToFragmentEvent("***** Client Opened *****", RegFragment.TAG));
 
-                                    //EventBus.getDefault().post(new MessageToFragmentEvent("***** my IP : "+ip+" \nowner : "+wifiP2pInfo.groupOwnerAddress.toString()+" *****",RegFragment.TAG));
-                                }
-                            });
-                            t.start();
+                        boolean amIOwner = false;
+                        if(myIp.equals(wifiP2pInfo.groupOwnerAddress.toString().replace("/",""))){
+                            amIOwner = true;
+                            EventBus.getDefault().post(new MessageToFragmentEvent("***** I AM THE OWNER *****",RegFragment.TAG));
                         }
+                        rxNetworkSession.setAmIOwner(amIOwner);
+                        EventBus.getDefault().post(new MessageToFragmentEvent("***** my IP : "+ip+" \nowner : "+wifiP2pInfo.groupOwnerAddress.toString()+" *****",RegFragment.TAG));
+//                        if(!myIp.equals(wifiP2pInfo.groupOwnerAddress.toString().replace("/",""))) {
+//                            Thread t = new Thread(new Runnable() {
+//                                @Override
+//                                public void run() {
+//                                    try {
+//                                        Thread.sleep(500);
+//                                    } catch (InterruptedException e) {
+//                                        e.printStackTrace();
+//                                    }
+//                                    rxNetworkSession.openNotOwnerClient(wifiP2pInfo.groupOwnerAddress.toString().replace("/",""));
+//                                    EventBus.getDefault().post(new MessageToFragmentEvent("***** Client Opened *****", RegFragment.TAG));
+//
+//                                    //EventBus.getDefault().post(new MessageToFragmentEvent("***** my IP : "+ip+" \nowner : "+wifiP2pInfo.groupOwnerAddress.toString()+" *****",RegFragment.TAG));
+//                                }
+//                            });
+//                            t.start();
+//                        }
 
 
 
@@ -171,6 +178,11 @@ public class MainActivity extends AppCompatActivity {
             });
             t.start();
 
+        }
+        if(eventToMainActivity.event == EventToMainActivity.PING){
+//            RxNetworkSession.getInstance().pingTheServer();
+            RxNetworkSession.getInstance().openNotOwnerClient(host.replace("/",""));
+                                    EventBus.getDefault().post(new MessageToFragmentEvent("***** Client Opened *****", RegFragment.TAG));
         }
     }
 
